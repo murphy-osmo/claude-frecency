@@ -70,6 +70,41 @@ def extract_at_references(prompt: str, cwd: str) -> list[str]:
     return paths
 
 
+def extract_executed_files(command: str, cwd: str) -> list[str]:
+    """Extract files being executed from a bash command."""
+    paths = []
+    # Patterns: interpreter followed by file path
+    # Matches: python, python3, node, bash, sh, zsh, ruby, perl, pytest, go run, etc.
+    interpreters = r"(?:python[23]?|node|bash|sh|zsh|ruby|perl|pytest|php)"
+    pattern = rf"(?:^|\s|&&|\|\||;){interpreters}\s+([^\s;&|]+)"
+    for match in re.findall(pattern, command):
+        if not match.startswith("-"):  # Skip flags
+            candidate = resolve_path(match, cwd)
+            if candidate:
+                paths.append(candidate)
+
+    # Direct execution: ./script or /path/to/script
+    direct_pattern = r"(?:^|\s|&&|\|\||;)(\.?/[^\s;&|]+)"
+    for match in re.findall(direct_pattern, command):
+        candidate = resolve_path(match, cwd)
+        if candidate:
+            paths.append(candidate)
+
+    return paths
+
+
+def resolve_path(path: str, cwd: str) -> str | None:
+    """Resolve a path to absolute and verify it exists as a file."""
+    if path.startswith("/"):
+        candidate = path
+    else:
+        candidate = os.path.join(cwd, path)
+    candidate = os.path.normpath(candidate)
+    if os.path.isfile(candidate):
+        return candidate
+    return None
+
+
 def main():
     data = json.load(sys.stdin)
     event = data.get("hook_event_name", "")
@@ -84,10 +119,15 @@ def main():
 
     elif event == "PostToolUse":
         tool = data.get("tool_name", "")
+        tool_input = data.get("tool_input", {})
         if tool in ("Write", "Edit"):
-            file_path = data.get("tool_input", {}).get("file_path", "")
+            file_path = tool_input.get("file_path", "")
             if file_path and os.path.isfile(file_path):
                 increment_file(db, file_path)
+        elif tool == "Bash":
+            command = tool_input.get("command", "")
+            for path in extract_executed_files(command, cwd):
+                increment_file(db, path)
 
     db = apply_decay(db)
     save_db(db)

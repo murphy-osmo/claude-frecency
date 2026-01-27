@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a frecency-based file suggestion system for Claude Code. It consists of two Python scripts that work as Claude Code hooks:
 
-1. **frecency_track.py** - Tracks file access via UserPromptSubmit (@file references) and PostToolUse (Write/Edit) hooks
+1. **frecency_track.py** - Tracks file access via UserPromptSubmit (@file references) and PostToolUse (Write/Edit/Bash) hooks
 2. **file_suggestion.py** - Provides file suggestions based on frecency scores, used by Claude Code's fileSuggestion config
 
 ## Running

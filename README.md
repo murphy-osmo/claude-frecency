@@ -14,6 +14,7 @@ A hook script that tracks file access from Claude Code:
 
 - Monitors `@file` references in user prompts
 - Tracks files modified via Write and Edit tools
+- Tracks files executed via Bash (python, node, pytest, shell scripts, etc.)
 - Stores data in `~/.claude/file-frecency.tsv`
 - Implements score decay to prevent unbounded growth
 
@@ -54,7 +55,7 @@ Add to your Claude Code settings (`~/.claude/settings.json`):
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|Bash",
         "hooks": [
           {
             "type": "command",
