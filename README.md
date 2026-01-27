@@ -26,6 +26,9 @@ Suggests files based on frecency scores:
   - Last 24 hours: 2x
   - Last week: 0.5x
   - Older: 0.25x
+- Proximity scoring: boosts files near recently accessed files
+  - Uses 5 most recent files as anchors
+  - Adds 2 points per shared directory level
 - Scopes results to current project only
 - Falls back to `git ls-files` when frecency results are exhausted
 - Supports query filtering via substring match

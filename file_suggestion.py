@@ -10,6 +10,8 @@ from pathlib import Path
 
 DB_PATH = Path.home() / ".claude" / "file-frecency.tsv"
 MAX_RESULTS = 15
+PROXIMITY_WEIGHT = 2.0  # Points per shared directory level
+ANCHOR_COUNT = 5  # Number of recent files to use as anchors
 
 
 def recency_multiplier(last_access: float) -> float:
@@ -25,8 +27,8 @@ def recency_multiplier(last_access: float) -> float:
         return 0.25
 
 
-def load_and_score() -> list[tuple[str, float]]:
-    """Load database and compute frecency scores."""
+def load_db() -> list[tuple[str, float, float]]:
+    """Load database entries as (path, score, last_access) tuples."""
     if not DB_PATH.exists():
         return []
     results = []
@@ -36,9 +38,39 @@ def load_and_score() -> list[tuple[str, float]]:
         parts = line.split("\t")
         if len(parts) == 3:
             path, score, last_access = parts[0], float(parts[1]), float(parts[2])
-            frecency = score * recency_multiplier(last_access)
-            results.append((path, frecency))
+            results.append((path, score, last_access))
     return results
+
+
+def compute_frecency(entries: list[tuple[str, float, float]]) -> list[tuple[str, float]]:
+    """Compute frecency scores from raw entries."""
+    return [(path, score * recency_multiplier(last_access)) for path, score, last_access in entries]
+
+
+def get_recent_anchors(entries: list[tuple[str, float, float]], n: int) -> list[str]:
+    """Get the N most recently accessed files as anchors."""
+    sorted_by_recency = sorted(entries, key=lambda x: -x[2])  # Sort by last_access descending
+    return [path for path, _, _ in sorted_by_recency[:n]]
+
+
+def shared_directory_depth(path1: str, path2: str) -> int:
+    """Count shared directory components from root."""
+    parts1 = Path(path1).parent.parts
+    parts2 = Path(path2).parent.parts
+    shared = 0
+    for p1, p2 in zip(parts1, parts2):
+        if p1 == p2:
+            shared += 1
+        else:
+            break
+    return shared
+
+
+def proximity_score(candidate: str, anchors: list[str]) -> int:
+    """Return max shared directory depth across all anchors."""
+    if not anchors:
+        return 0
+    return max(shared_directory_depth(candidate, anchor) for anchor in anchors)
 
 
 def find_project_files(project_dir: str, query: str, limit: int) -> list[str]:
@@ -85,16 +117,25 @@ def main():
     query = data.get("query", "").lower()
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 
-    scored = load_and_score()
+    raw_entries = load_db()
 
     # Filter to files within project directory
-    scored = [(p, s) for p, s in scored if p.startswith(project_dir + "/")]
+    project_entries = [(p, s, t) for p, s, t in raw_entries if p.startswith(project_dir + "/")]
+
+    # Get recent anchors for proximity scoring (before query filtering)
+    anchors = get_recent_anchors(project_entries, ANCHOR_COUNT)
+
+    # Compute frecency scores
+    scored = compute_frecency(project_entries)
 
     # Filter by query (substring match)
     if query:
         scored = [(p, s) for p, s in scored if query in p.lower()]
 
-    # Sort by frecency score descending
+    # Add proximity boost to scores
+    scored = [(p, frecency + PROXIMITY_WEIGHT * proximity_score(p, anchors)) for p, frecency in scored]
+
+    # Sort by final score descending
     scored.sort(key=lambda x: -x[1])
 
     # Convert to relative paths if within project
