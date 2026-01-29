@@ -160,14 +160,8 @@ def main():
     # Add proximity boost to scores
     scored = [(p, frecency + PROXIMITY_WEIGHT * proximity_score(p, anchors)) for p, frecency in scored]
 
-    # Sort by final score descending, but boost prefix-matched directories to top
-    def sort_key(item):
-        path, score = item
-        rel_path = path[len(project_dir) + 1:] if path.startswith(project_dir + "/") else path
-        # Prefix-matched directory gets boosted to top
-        is_prefix_dir = query and path in directories and rel_path.lower().startswith(query)
-        return (not is_prefix_dir, -score)
-    scored.sort(key=sort_key)
+    # Sort by final score descending
+    scored.sort(key=lambda x: -x[1])
 
     # Convert to relative paths if within project, suffix directories with /
     frecency_results = []
@@ -195,6 +189,36 @@ def main():
             display_path = f + "/" if Path(abs_path).is_dir() else f
             if abs_path not in frecency_absolute and display_path not in frecency_results:
                 frecency_results.append(display_path)
+
+    # Boost prefix-matched entry to first position for tab completion
+    if query:
+        # First check existing results (prefer directories over files)
+        prefix_match_idx = None
+        for i, result in enumerate(frecency_results):
+            if result.rstrip("/").lower().startswith(query):
+                if result.endswith("/"):
+                    # Directory match - use immediately
+                    prefix_match_idx = i
+                    break
+                elif prefix_match_idx is None:
+                    # File match - remember but keep looking for directory
+                    prefix_match_idx = i
+        if prefix_match_idx is not None:
+            frecency_results.insert(0, frecency_results.pop(prefix_match_idx))
+        else:
+            # Check filesystem for prefix-matched entry (prefer directories)
+            candidates = sorted(Path(project_dir).glob(query + "*"))
+            dirs = [c for c in candidates if c.is_dir()]
+            files = [c for c in candidates if c.is_file()]
+            match = (dirs or files or [None])[0]
+            if match:
+                rel_path = str(match.relative_to(project_dir))
+                if match.is_dir():
+                    rel_path += "/"
+                if rel_path not in frecency_results:
+                    frecency_results.insert(0, rel_path)
+                    if len(frecency_results) > MAX_RESULTS:
+                        frecency_results.pop()
 
     print("\n".join(frecency_results))
 
