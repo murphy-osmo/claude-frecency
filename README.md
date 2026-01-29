@@ -1,49 +1,34 @@
 # Claude Frecency
 
-A frecency-based file suggestion system for Claude Code. Tracks file access patterns and suggests frequently-used files with recency weighting.
-
-## What is Frecency?
-
-Frecency combines **frequency** (how often) and **recency** (how recently) to rank items. Files you access frequently and recently score higher than files accessed long ago.
+Frecency-based file suggestions for Claude Code. Ranks files by frequency + recency.
 
 ## Components
 
 ### frecency_track.py
 
-A hook script that tracks file access from Claude Code:
+Tracks file access via Claude Code hooks:
+- `@file` references in prompts
+- Write/Edit tool modifications
+- Bash executions (python, node, pytest, scripts)
 
-- Monitors `@file` references in user prompts
-- Tracks files modified via Write and Edit tools
-- Tracks files executed via Bash (python, node, pytest, shell scripts, etc.)
-- Stores data in `~/.claude/file-frecency.tsv`
-- Implements score decay to prevent unbounded growth
+Data stored in `~/.claude/file-frecency.tsv`.
 
 ### file_suggestion.py
 
-Suggests files and directories based on frecency scores:
+Returns up to 15 suggestions based on:
+- **Frecency scores**: recency multipliers (4x last hour, 2x last day, 0.5x last week, 0.25x older)
+- **Proximity**: +2 points per shared directory level with 5 most recent files
+- **Directories**: immediate parents included, scored by median of contents, suffixed with `/`
 
-- Applies recency multipliers:
-  - Last hour: 4x
-  - Last 24 hours: 2x
-  - Last week: 0.5x
-  - Older: 0.25x
-- Proximity scoring: boosts files near recently accessed files
-  - Uses 5 most recent files as anchors
-  - Adds 2 points per shared directory level
-- Includes immediate parent directories of tracked files
-  - Directories scored by median of their contained files
-  - Directories suffixed with `/` to distinguish from files
-- Tab completion: shortest prefix-matched path boosted to first position
-  - Directories preferred over files when both match
-  - Mimics bash tab completion (e.g., `src/sandbox/mu` → `src/sandbox/murphy/`)
-- Scopes results to current project only
-- Falls back to `git ls-files` (or `find` for non-git repos) when frecency results are exhausted
-- Supports query filtering via substring match
-- Returns top 15 results
+Query modes:
+- **Path prefix** (`src/sandbox/mu`): tab completion, shortest match first, directories preferred
+- **Substring** (`train`): frecency-ranked matches
+
+Falls back to `git ls-files` when frecency data is exhausted.
 
 ## Installation
 
-Add to your Claude Code settings (`~/.claude/settings.json`):
+Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -51,23 +36,13 @@ Add to your Claude Code settings (`~/.claude/settings.json`):
     "UserPromptSubmit": [
       {
         "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 /path/to/frecency_track.py"
-          }
-        ]
+        "hooks": [{"type": "command", "command": "python3 /path/to/frecency_track.py"}]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 /path/to/frecency_track.py"
-          }
-        ]
+        "hooks": [{"type": "command", "command": "python3 /path/to/frecency_track.py"}]
       }
     ]
   },
@@ -80,14 +55,8 @@ Add to your Claude Code settings (`~/.claude/settings.json`):
 
 ## Data Format
 
-The frecency database (`~/.claude/file-frecency.tsv`) uses tab-separated values:
+Tab-separated: `path`, `score`, `last_access_timestamp`
 
 ```
 /path/to/file.py	42.5	1706123456
 ```
-
-Fields: `path`, `score`, `last_access_timestamp`
-
-## Dependencies
-
-Python 3.7+ with standard library only.
