@@ -74,7 +74,7 @@ def proximity_score(candidate: str, anchors: list[str]) -> int:
 
 
 def find_project_files(project_dir: str, query: str, limit: int) -> list[str]:
-    """Find files in project matching query using git ls-files or find."""
+    """Find files and directories in project using git ls-files or find."""
     if limit <= 0:
         return []
 
@@ -92,24 +92,39 @@ def find_project_files(project_dir: str, query: str, limit: int) -> list[str]:
         else:
             raise subprocess.SubprocessError("git failed")
     except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError):
-        # Fallback to find
+        # Fallback to find (files and directories)
         try:
             result = subprocess.run(
-                ["find", ".", "-type", "f", "-not", "-path", "./.git/*"],
+                ["find", ".", "(", "-type", "f", "-o", "-type", "d", ")", "-not", "-path", "./.git/*", "-not", "-path", "./.git"],
                 cwd=project_dir,
                 capture_output=True,
                 text=True,
                 timeout=2,
             )
-            files = [f.lstrip("./") for f in result.stdout.strip().split("\n")]
+            entries = [e.lstrip("./") for e in result.stdout.strip().split("\n") if e and e != "."]
+            # Filter by query and return early for find fallback
+            if query:
+                entries = [e for e in entries if query in e.lower()]
+            return entries[:limit]
         except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError):
             return []
 
+    # Extract directories that contain tracked files
+    directories = set()
+    for f in files:
+        path = Path(f)
+        for parent in path.parents:
+            if parent != Path("."):
+                directories.add(str(parent))
+
+    # Combine files and directories
+    all_entries = files + sorted(directories)
+
     # Filter by query
     if query:
-        files = [f for f in files if query in f.lower()]
+        all_entries = [e for e in all_entries if query in e.lower()]
 
-    return files[:limit]
+    return all_entries[:limit]
 
 
 def main():
@@ -127,6 +142,15 @@ def main():
 
     # Compute frecency scores
     scored = compute_frecency(project_entries)
+
+    # Extract directories from frecency entries, score = max of contained files
+    dir_scores: dict[str, float] = {}
+    for path, score in scored:
+        for parent in Path(path).parents:
+            parent_str = str(parent)
+            if parent_str.startswith(project_dir + "/"):
+                dir_scores[parent_str] = max(dir_scores.get(parent_str, 0), score)
+    scored.extend(dir_scores.items())
 
     # Filter by query (substring match)
     if query:
