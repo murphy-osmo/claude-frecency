@@ -143,13 +143,12 @@ def main():
     # Compute frecency scores
     scored = compute_frecency(project_entries)
 
-    # Extract directories from frecency entries, score = max of contained files
+    # Extract immediate parent directories from frecency entries
     dir_scores: dict[str, float] = {}
     for path, score in scored:
-        for parent in Path(path).parents:
-            parent_str = str(parent)
-            if parent_str.startswith(project_dir + "/"):
-                dir_scores[parent_str] = max(dir_scores.get(parent_str, 0), score)
+        parent_str = str(Path(path).parent)
+        if parent_str.startswith(project_dir + "/"):
+            dir_scores[parent_str] = max(dir_scores.get(parent_str, 0), score)
     scored.extend(dir_scores.items())
 
     # Filter by query (substring match)
