@@ -3,6 +3,7 @@
 
 import json
 import os
+import statistics
 import subprocess
 import sys
 import time
@@ -143,13 +144,13 @@ def main():
     # Compute frecency scores
     scored = compute_frecency(project_entries)
 
-    # Extract immediate parent directories from frecency entries
-    dir_scores: dict[str, float] = {}
+    # Extract immediate parent directories, score = median of contained files
+    dir_scores: dict[str, list[float]] = {}
     for path, score in scored:
         parent_str = str(Path(path).parent)
         if parent_str.startswith(project_dir + "/"):
-            dir_scores[parent_str] = max(dir_scores.get(parent_str, 0), score)
-    scored.extend(dir_scores.items())
+            dir_scores.setdefault(parent_str, []).append(score)
+    scored.extend((d, statistics.median(scores)) for d, scores in dir_scores.items())
 
     # Filter by query (substring match)
     if query:
