@@ -150,6 +150,7 @@ def main():
         parent_str = str(Path(path).parent)
         if parent_str.startswith(project_dir + "/"):
             dir_scores.setdefault(parent_str, []).append(score)
+    directories = set(dir_scores.keys())
     scored.extend((d, statistics.median(scores)) for d, scores in dir_scores.items())
 
     # Filter by query (substring match)
@@ -159,18 +160,27 @@ def main():
     # Add proximity boost to scores
     scored = [(p, frecency + PROXIMITY_WEIGHT * proximity_score(p, anchors)) for p, frecency in scored]
 
-    # Sort by final score descending
-    scored.sort(key=lambda x: -x[1])
+    # Sort by final score descending, but boost prefix-matched directories to top
+    def sort_key(item):
+        path, score = item
+        rel_path = path[len(project_dir) + 1:] if path.startswith(project_dir + "/") else path
+        # Prefix-matched directory gets boosted to top
+        is_prefix_dir = query and path in directories and rel_path.lower().startswith(query)
+        return (not is_prefix_dir, -score)
+    scored.sort(key=sort_key)
 
-    # Convert to relative paths if within project
+    # Convert to relative paths if within project, suffix directories with /
     frecency_results = []
     frecency_absolute = set()
     for path, _ in scored[:MAX_RESULTS]:
         frecency_absolute.add(path)
         if path.startswith(project_dir + "/"):
-            frecency_results.append(path[len(project_dir) + 1 :])
+            rel_path = path[len(project_dir) + 1:]
         else:
-            frecency_results.append(path)
+            rel_path = path
+        if path in directories:
+            rel_path += "/"
+        frecency_results.append(rel_path)
 
     # Fill remaining slots with project files
     remaining = MAX_RESULTS - len(frecency_results)
@@ -181,8 +191,10 @@ def main():
             if len(frecency_results) >= MAX_RESULTS:
                 break
             abs_path = os.path.join(project_dir, f)
-            if abs_path not in frecency_absolute and f not in frecency_results:
-                frecency_results.append(f)
+            # Add / suffix for directories
+            display_path = f + "/" if Path(abs_path).is_dir() else f
+            if abs_path not in frecency_absolute and display_path not in frecency_results:
+                frecency_results.append(display_path)
 
     print("\n".join(frecency_results))
 
