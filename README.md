@@ -32,6 +32,10 @@ Suggests files and directories based on frecency scores:
   - Adds 2 points per shared directory level
 - Includes immediate parent directories of tracked files
   - Directories scored by median of their contained files
+  - Directories suffixed with `/` to distinguish from files
+- Tab completion: shortest prefix-matched path boosted to first position
+  - Directories preferred over files when both match
+  - Mimics bash tab completion (e.g., `src/sandbox/mu` → `src/sandbox/murphy/`)
 - Scopes results to current project only
 - Falls back to `git ls-files` (or `find` for non-git repos) when frecency results are exhausted
 - Supports query filtering via substring match

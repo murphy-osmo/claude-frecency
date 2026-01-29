@@ -27,6 +27,7 @@ echo '{"query": ""}' | CLAUDE_PROJECT_DIR=/project python3 file_suggestion.py
 - Scores decay by 0.9x when total exceeds 5000 to prevent unbounded growth
 - Recency multipliers: 4x (last hour), 2x (last day), 0.5x (last week), 0.25x (older)
 - Proximity scoring: files in same directory as recent anchors get +2 points per shared directory level
-- Directory suggestions: immediate parent directories are included, scored by median of their contents
+- Directory suggestions: immediate parent directories are included, scored by median of their contents, suffixed with `/`
+- Tab completion: shortest prefix-matched path boosted to first position (directories preferred over files)
 - Suggestion fallback: frecency results first, then `git ls-files` (or `find` if not a git repo)
 - Project scoping via `CLAUDE_PROJECT_DIR` environment variable
