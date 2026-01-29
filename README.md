@@ -20,7 +20,7 @@ A hook script that tracks file access from Claude Code:
 
 ### file_suggestion.py
 
-Suggests files based on frecency scores:
+Suggests files and directories based on frecency scores:
 
 - Applies recency multipliers:
   - Last hour: 4x
@@ -30,8 +30,10 @@ Suggests files based on frecency scores:
 - Proximity scoring: boosts files near recently accessed files
   - Uses 5 most recent files as anchors
   - Adds 2 points per shared directory level
+- Includes directories containing tracked files
+  - Directories inherit the max score of their contained files
 - Scopes results to current project only
-- Falls back to `git ls-files` when frecency results are exhausted
+- Falls back to `git ls-files` (or `find` for non-git repos) when frecency results are exhausted
 - Supports query filtering via substring match
 - Returns top 15 results
 
