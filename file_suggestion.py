@@ -191,25 +191,42 @@ def main():
                 frecency_results.append(display_path)
 
     # Boost shortest prefix-matched entry to first position for tab completion
-    if query:
-        # Find shortest matching path from filesystem (prefer directories)
-        candidates = sorted(Path(project_dir).glob(query + "*"))
-        dirs = [c for c in candidates if c.is_dir()]
-        files = [c for c in candidates if c.is_file()]
-        # Sort by path length to get shortest match
-        dirs.sort(key=lambda p: len(str(p)))
-        files.sort(key=lambda p: len(str(p)))
-        match = (dirs or files or [None])[0]
-        if match:
-            rel_path = str(match.relative_to(project_dir))
-            if match.is_dir():
-                rel_path += "/"
-            # Remove from current position if present, then insert at front
-            if rel_path in frecency_results:
-                frecency_results.remove(rel_path)
-            frecency_results.insert(0, rel_path)
-            if len(frecency_results) > MAX_RESULTS:
-                frecency_results.pop()
+    # Only apply when query contains "/" (path prefix mode vs substring search)
+    if query and "/" in query:
+        # Split into parent directory and prefix
+        query_path = Path(query)
+        parent_dir = Path(project_dir) / query_path.parent
+        prefix = query_path.name.lower()
+
+        # Early bailout if parent doesn't exist
+        if parent_dir.is_dir():
+            # Scan parent directory and filter by prefix
+            dirs = []
+            files = []
+            try:
+                for entry in os.scandir(parent_dir):
+                    if entry.name.lower().startswith(prefix):
+                        if entry.is_dir():
+                            dirs.append(entry.path)
+                        elif entry.is_file():
+                            files.append(entry.path)
+            except OSError:
+                pass
+
+            # Sort alphabetically, pick first directory or file
+            dirs.sort()
+            files.sort()
+            match = (dirs or files or [None])[0]
+            if match:
+                rel_path = str(Path(match).relative_to(project_dir))
+                if Path(match).is_dir():
+                    rel_path += "/"
+                # Remove from current position if present, then insert at front
+                if rel_path in frecency_results:
+                    frecency_results.remove(rel_path)
+                frecency_results.insert(0, rel_path)
+                if len(frecency_results) > MAX_RESULTS:
+                    frecency_results.pop()
 
     print("\n".join(frecency_results))
 
